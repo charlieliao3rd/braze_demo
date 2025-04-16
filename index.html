@@ -155,7 +155,7 @@
           const permission = await Notification.requestPermission();
 
           if (permission === 'granted') {
-            braze.registerAppboyPushMessages();
+            braze.requestPushPermission();
             resultBox.textContent = '✅ You have successfully subscribed to push notifications!';
             resultBox.className = 'success';
           } else {
