@@ -144,7 +144,7 @@
 
         // Check the current push notification permission
         if (Notification.permission === 'granted') {
-          braze.registerAppboyPushMessages();
+          braze.requestPushPermission();
           resultBox.textContent = '✅ You have successfully subscribed to push notifications!';
           resultBox.className = 'success';
         } else if (Notification.permission === 'denied') {
