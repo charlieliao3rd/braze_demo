@@ -1,0 +1,13 @@
+{
+  "name": "braze-web-push-demo",
+  "version": "1.0.0",
+  "description": "Braze x Future Anthem Web Push Integration",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  }
+}
