@@ -1,17 +1,32 @@
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = 'my_super_secret_key'; // Manually set here
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  try {
-    const payload = req.body;
+  const authHeader = req.headers.authorization;
 
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized - No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    console.log('✅ Authenticated request from:', decoded);
+
+    const payload = req.body;
     console.log('🔔 Webhook received:', payload);
 
-    // You can customize this logic — e.g., display this in your UI via database or logs
-    return res.status(200).json({ status: 'Received', received: payload });
+    return res.status(200).json({ status: 'Received', received: payload, user: decoded });
+
   } catch (err) {
-    console.error('❌ Webhook error:', err);
-    return res.status(500).json({ error: 'Server Error' });
+    console.error('❌ Token verification failed:', err.message);
+    return res.status(401).json({ error: 'Unauthorized - Invalid or expired token' });
   }
 }
+
