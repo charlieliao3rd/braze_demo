@@ -22,6 +22,23 @@
       ]
     },
     {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type"
+        }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {
@@ -32,6 +49,21 @@
     }
   ],
   "routes": [
+    {
+      "src": "/api/webhook",
+      "methods": ["POST", "GET", "OPTIONS"],
+      "dest": "/api/webhook.js"
+    },
+    {
+      "src": "/api/get-message",
+      "methods": ["GET"],
+      "dest": "/api/get-message.js"
+    },
+    {
+      "src": "/api/sse",
+      "methods": ["GET"],
+      "dest": "/api/sse.js"
+    },
     {
       "src": "/push-test",
       "methods": ["GET"],
