@@ -2,9 +2,9 @@
 // This webhook accepts POST requests from Braze without authentication
 // and stores the message to be displayed as a popup
 
-import { getMessageStore } from './message-store';
+const { getMessageStore } = require('./message-store');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Enable CORS for all origins (adjust for production)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -58,4 +58,4 @@ export default async function handler(req, res) {
   
   // Block other methods
   return res.status(405).json({ error: "Method not allowed" });
-}
+};
