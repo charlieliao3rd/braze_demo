@@ -89,6 +89,24 @@
       font-size: 18px;
       margin: 20px 0;
     }
+    
+    /* Notification badge */
+    .notification-badge {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #4CAF50;
+      color: white;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      z-index: 1000;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
   </style>
 
   <!-- Load Braze Web SDK -->
@@ -134,6 +152,11 @@
     </div>
   </div>
 
+  <!-- Notification Badge (hidden by default) -->
+  <div id="notificationBadge" class="notification-badge" style="display: none;" onclick="showPopupFromBadge()">
+    <span id="badgeCount">1</span>
+  </div>
+
   <script>
     const brazeConfig = {
       apiKey: '84e848cb-2923-4629-bd23-e6e4155615bd',
@@ -141,23 +164,89 @@
       enableLogging: true
     };
 
-    function updateStatus(text, type) {
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = text;
-      statusEl.className = type || '';
+    // WebSocket connection
+    let socket;
+    let unreadMessages = [];
+    let isPopupOpen = false;
+
+    function connectWebSocket() {
+      // Create WebSocket connection (use wss:// if your site is HTTPS)
+      const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      socket = new WebSocket(`${protocol}${window.location.host}/api/webhook`);
+
+      socket.onopen = function() {
+        console.log('WebSocket connected');
+      };
+
+      socket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'notification') {
+          handleNewMessage(data.data);
+        }
+      };
+
+      socket.onclose = function() {
+        console.log('WebSocket disconnected, attempting to reconnect...');
+        setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
+      };
+
+      socket.onerror = function(error) {
+        console.error('WebSocket error:', error);
+      };
     }
 
-    // Popup functions
+    function handleNewMessage(message) {
+      unreadMessages.push(message);
+      updateBadge();
+      
+      // Show immediately if no popup is currently open
+      if (!isPopupOpen) {
+        showPopup(message);
+      }
+    }
+
+    function updateBadge() {
+      const badge = document.getElementById('notificationBadge');
+      const badgeCount = document.getElementById('badgeCount');
+      
+      if (unreadMessages.length > 0) {
+        badge.style.display = 'flex';
+        badgeCount.textContent = unreadMessages.length;
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function showPopupFromBadge() {
+      if (unreadMessages.length > 0) {
+        showPopup(unreadMessages[0]);
+      }
+    }
+
     function showPopup(message) {
+      isPopupOpen = true;
       const overlay = document.getElementById('popupOverlay');
       const messageEl = document.getElementById('popupMessage');
       messageEl.textContent = message;
       overlay.style.display = 'flex';
+      
+      // Remove the displayed message from queue
+      const messageIndex = unreadMessages.indexOf(message);
+      if (messageIndex > -1) {
+        unreadMessages.splice(messageIndex, 1);
+        updateBadge();
+      }
     }
 
     function closePopup() {
+      isPopupOpen = false;
       const overlay = document.getElementById('popupOverlay');
       overlay.style.display = 'none';
+      
+      // Show next message if available
+      if (unreadMessages.length > 0) {
+        setTimeout(() => showPopup(unreadMessages[0]), 500);
+      }
     }
 
     // Click outside to close
@@ -167,45 +256,10 @@
       }
     });
 
-    // Listen for messages from the server
-    function startPolling() {
-      setInterval(async () => {
-        try {
-          const response = await fetch('/api/get-message');
-          if (response.ok) {
-            const data = await response.json();
-            if (data.message) {
-              showPopup(data.message);
-            }
-          }
-        } catch (error) {
-          console.error('Polling error:', error);
-        }
-      }, 5000); // Poll every 5 seconds
-    }
-
-    // Alternative: Use Server-Sent Events for real-time updates
-    function connectToSSE() {
-      if (typeof EventSource !== 'undefined') {
-        const eventSource = new EventSource('/api/sse');
-        
-        eventSource.onmessage = function(event) {
-          const data = JSON.parse(event.data);
-          if (data.message) {
-            showPopup(data.message);
-          }
-        };
-        
-        eventSource.onerror = function(error) {
-          console.error('SSE error:', error);
-          // Fallback to polling
-          eventSource.close();
-          startPolling();
-        };
-      } else {
-        // Browser doesn't support SSE, use polling
-        startPolling();
-      }
+    function updateStatus(text, type) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = text;
+      statusEl.className = type || '';
     }
 
     function initializeBraze() {
@@ -228,6 +282,8 @@
             clearInterval(initInterval);
             braze.openSession();
             updateStatus('✅ Braze Initialized Successfully', 'success');
+            // Connect WebSocket after Braze is initialized
+            connectWebSocket();
           }
         }, 100);
 
