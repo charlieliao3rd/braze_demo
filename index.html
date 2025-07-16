@@ -35,6 +35,60 @@
     label {
       font-weight: bold;
     }
+    
+    /* Popup styles */
+    .popup-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .popup-content {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      max-width: 500px;
+      text-align: center;
+      position: relative;
+      animation: popupAnimation 0.3s ease-out;
+    }
+    
+    @keyframes popupAnimation {
+      from {
+        transform: scale(0.7);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    
+    .popup-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    .popup-close:hover {
+      color: #000;
+    }
+    
+    .popup-message {
+      font-size: 18px;
+      margin: 20px 0;
+    }
   </style>
 
   <!-- Load Braze Web SDK -->
@@ -72,6 +126,14 @@
     <div id="testResults"></div>
   </div>
 
+  <!-- Popup Overlay -->
+  <div id="popupOverlay" class="popup-overlay">
+    <div class="popup-content">
+      <span class="popup-close" onclick="closePopup()">&times;</span>
+      <div id="popupMessage" class="popup-message"></div>
+    </div>
+  </div>
+
   <script>
     const brazeConfig = {
       apiKey: '84e848cb-2923-4629-bd23-e6e4155615bd',
@@ -83,6 +145,67 @@
       const statusEl = document.getElementById('status');
       statusEl.textContent = text;
       statusEl.className = type || '';
+    }
+
+    // Popup functions
+    function showPopup(message) {
+      const overlay = document.getElementById('popupOverlay');
+      const messageEl = document.getElementById('popupMessage');
+      messageEl.textContent = message;
+      overlay.style.display = 'flex';
+    }
+
+    function closePopup() {
+      const overlay = document.getElementById('popupOverlay');
+      overlay.style.display = 'none';
+    }
+
+    // Click outside to close
+    document.getElementById('popupOverlay').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closePopup();
+      }
+    });
+
+    // Listen for messages from the server
+    function startPolling() {
+      setInterval(async () => {
+        try {
+          const response = await fetch('/api/get-message');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.message) {
+              showPopup(data.message);
+            }
+          }
+        } catch (error) {
+          console.error('Polling error:', error);
+        }
+      }, 5000); // Poll every 5 seconds
+    }
+
+    // Alternative: Use Server-Sent Events for real-time updates
+    function connectToSSE() {
+      if (typeof EventSource !== 'undefined') {
+        const eventSource = new EventSource('/api/sse');
+        
+        eventSource.onmessage = function(event) {
+          const data = JSON.parse(event.data);
+          if (data.message) {
+            showPopup(data.message);
+          }
+        };
+        
+        eventSource.onerror = function(error) {
+          console.error('SSE error:', error);
+          // Fallback to polling
+          eventSource.close();
+          startPolling();
+        };
+      } else {
+        // Browser doesn't support SSE, use polling
+        startPolling();
+      }
     }
 
     function initializeBraze() {
@@ -101,81 +224,4 @@
         });
 
         const initInterval = setInterval(() => {
-          if (braze.isInitialized()) {
-            clearInterval(initInterval);
-            braze.openSession();
-            updateStatus('✅ Braze Initialized Successfully', 'success');
-          }
-        }, 100);
-
-        setTimeout(() => {
-          clearInterval(initInterval);
-          if (!braze.isInitialized()) {
-            throw new Error('Initialization timeout');
-          }
-        }, 10000);
-      } catch (error) {
-        console.error('Initialization Error:', error);
-        updateStatus(`❌ ${error.message}`, 'error');
-      }
-    }
-
-    document.getElementById('userForm').addEventListener('submit', async function (e) {
-      e.preventDefault();
-      const externalId = document.getElementById('externalId').value.trim();
-      const firstName = document.getElementById('firstName').value.trim();
-      const email = document.getElementById('email').value.trim();
-      const resultBox = document.getElementById('testResults');
-
-      if (!externalId || !firstName || !email) {
-        resultBox.textContent = '⚠️ All fields are required.';
-        resultBox.className = 'error';
-        return;
-      }
-
-      resultBox.textContent = '⏳ Setting user and requesting push permission...';
-      resultBox.className = 'info';
-
-      try {
-        // Set user in Braze
-        braze.changeUser(externalId);
-        braze.getUser().setFirstName(firstName);
-        braze.getUser().setEmail(email);
-
-        // Check the current push notification permission
-        if (Notification.permission === 'granted') {
-          braze.requestPushPermission();
-          resultBox.textContent = '✅ You have successfully subscribed to push notifications!';
-          resultBox.className = 'success';
-        } else if (Notification.permission === 'denied') {
-          resultBox.textContent = '❌ Push notifications denied. Please enable them in browser settings.';
-          resultBox.className = 'error';
-        } else {
-          // Request push permission if not yet granted
-          const permission = await Notification.requestPermission();
-
-          if (permission === 'granted') {
-            braze.requestPushPermission();
-            resultBox.textContent = '✅ You have successfully subscribed to push notifications!';
-            resultBox.className = 'success';
-          } else {
-            resultBox.textContent = '❌ Push notifications denied.';
-            resultBox.className = 'error';
-          }
-        }
-      } catch (err) {
-        console.error('Error during user setup:', err);
-        resultBox.textContent = `❌ Error: ${err.message}`;
-        resultBox.className = 'error';
-      }
-    });
-
-    // Optional: Register service worker for web push
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then(() => console.log('✅ Service Worker registered'))
-        .catch(err => console.error('Service Worker registration failed:', err));
-    }
-  </script>
-</body>
-</html>
+          if
