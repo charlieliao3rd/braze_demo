@@ -1,11 +1,32 @@
 // api/webhook.js
+// This webhook accepts POST requests from Braze without authentication
+// and stores the message to be displayed as a popup
+
+import { getMessageStore } from './message-store';
+
 export default async function handler(req, res) {
-  // 1. Allow all POST requests (disable auth)
-  if (req.method === 'POST') {
-    console.log("Received webhook (no auth):", req.body);
-    return res.status(200).json({ status: "OK" });
+  // Enable CORS for all origins (adjust for production)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
-  
-  // 2. Block non-POST requests
-  return res.status(405).json({ error: "Method not allowed" });
-}
+
+  // Handle POST requests from Braze
+  if (req.method === 'POST') {
+    try {
+      console.log("Received webhook from Braze:", req.body);
+      
+      // Extract message from Braze payload
+      // Adjust based on your Braze webhook configuration
+      const message = req.body.message || 
+                     req.body.custom_message || 
+                     req.body.data?.message ||
+                     "New notification from Braze!";
+      
+      // Store message using shared store
+      const store = getMessageStore();
+      st
