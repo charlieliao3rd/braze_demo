@@ -1,39 +1,54 @@
 // api/webhook.js
-// This webhook accepts POST requests from Braze without authentication
-// and stores the message to be displayed as a popup
-
 const { getMessageStore } = require('./message-store');
+const WebSocket = require('ws');
+
+// Create WebSocket server (if not already created elsewhere)
+let wss;
+if (!global.wss) {
+  wss = new WebSocket.Server({ noServer: true });
+  global.wss = wss;
+} else {
+  wss = global.wss;
+}
 
 module.exports = async function handler(req, res) {
-  // Enable CORS for all origins (adjust for production)
+  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // Handle POST requests from Braze
   if (req.method === 'POST') {
     try {
       console.log("Received webhook from Braze:", req.body);
       
-      // Extract message from Braze payload
-      // Adjust based on your Braze webhook configuration
       const message = req.body.message || 
                      req.body.custom_message || 
                      req.body.data?.message ||
                      "New notification from Braze!";
       
-      // Store message using shared store
+      // Store message
       const store = getMessageStore();
       store.setMessage(message);
       
+      // Broadcast to all connected clients
+      if (wss) {
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'notification',
+              data: message
+            }));
+          }
+        });
+      }
+
       return res.status(200).json({ 
         status: "success",
-        message: "Message received and will be displayed",
+        message: "Message received and broadcasted",
         timestamp: Date.now()
       });
       
@@ -46,16 +61,20 @@ module.exports = async function handler(req, res) {
     }
   }
   
-  // Handle GET requests to retrieve current message
   if (req.method === 'GET') {
     const store = getMessageStore();
     const message = store.getMessage();
-    
-    return res.status(200).json({ 
-      message: message 
-    });
+    return res.status(200).json({ message });
   }
   
-  // Block other methods
   return res.status(405).json({ error: "Method not allowed" });
+};
+
+// Export WebSocket server for HTTP server upgrade
+module.exports.upgrade = (server) => {
+  server.on('upgrade', (request, socket, head) => {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  });
 };
